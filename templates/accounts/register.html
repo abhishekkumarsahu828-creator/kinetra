@@ -1,0 +1,23 @@
+{% extends 'base.html' %}{% block title %}Create account · KINETRA{% endblock %}{% block content %}<section
+    class="form-page">
+    <div class="container narrow">
+        <div class="form-shell">
+            <div class="form-shell-header"><span class="eyebrow">JOIN THE NETWORK</span>
+                <h1>Start building with better access.</h1>
+                <p>Register an account and request verification by your institution. Membership approval is required to
+                    book.</p>
+            </div>
+            <form method="post" class="app-form" data-submit-lock>{% csrf_token %}{% if form.non_field_errors %}<div
+                    class="form-errors">{{ form.non_field_errors }}</div>{% endif %}{% for field in form %}<div
+                    class="form-group"><label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required
+                        %}<span class="required"> *</span>{% endif %}</label>{{ field }}{% for error in field.errors %}
+                    <div class="field-error">{{ error }}</div>{% endfor %}{% if field.help_text %}<small
+                        class="field-help">{{ field.help_text|striptags }}</small>{% endif %}</div>{% endfor %}<button
+                    type="submit" class="btn btn-primary btn-full">Create account <svg class="icon">
+                        <use href="#i-arrow"></use>
+                    </svg></button>
+                <p class="auth-switch">Already registered? <a href="{% url 'login' %}">Sign in</a></p>
+            </form>
+        </div>
+    </div>
+</section>{% endblock %}

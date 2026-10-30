@@ -1,0 +1,53 @@
+{% load static %}
+<!doctype html>
+<html lang="en"><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#102C35">
+  <meta name="description" content="KINETRA — trusted access to institutional equipment and spaces.">
+  <title>{% block title %}KINETRA · Share more. Create more.{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <script src="{% static 'js/app.js' %}" defer></script>
+</head><body>
+<svg class="svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+ <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-7-7 7 7-7 7"/></symbol>
+ <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+ <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v5m10-5v5M3 10h18"/></symbol>
+ <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+ <symbol id="i-pin" viewBox="0 0 24 24"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+ <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 2 9 4v6c0 5-3.6 8.5-9 10-5.4-1.5-9-5-9-10V6z"/><path d="m8 12 3 3 5-6"/></symbol>
+ <symbol id="i-box" viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5zM3 7v10l9 5 9-5V7m-9 5v10"/></symbol>
+ <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21v-2a7 7 0 0 1 14 0v2M17 4a4 4 0 0 1 0 8m1 4a6 6 0 0 1 4 6"/></symbol>
+ <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></symbol>
+ <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 8-3 8-3 10h18c0-2-3-2-3-10zm-8 13h4"/></symbol>
+ <symbol id="i-alert" viewBox="0 0 24 24"><path d="m12 3 10 18H2L12 3Zm0 6v5m0 4h.01"/></symbol>
+ <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="m6 14 6-6 6 6M12 8v12"/></symbol>
+ <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+ <symbol id="i-close" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5 5 19"/></symbol>
+ <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16M9 4v6m6 4v6"/></symbol>
+ <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></symbol>
+ <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+</svg>
+<a class="skip-link" href="#main">Skip to main content</a>
+<header class="site-header">
+ <div class="container nav-bar">
+  <a class="logo" href="{% url 'home' %}" aria-label="KINETRA home"><span class="logo-mark"><span></span><span></span><span></span></span><span>KINETRA<span class="logo-dot">.</span></span></a>
+  <button class="mobile-menu-btn" type="button" id="menu-button" aria-controls="main-nav" aria-expanded="false" aria-label="Open navigation"><svg class="icon"><use href="#i-menu"></use></svg></button>
+  <nav id="main-nav" class="main-nav" aria-label="Main navigation">
+   <a href="{% url 'marketplace' %}" class="nav-link">Explore resources</a>
+   {% if user.is_authenticated %}
+   <a href="{% url 'dashboard' %}" class="nav-link">My workspace</a>
+   <a href="{% url 'owner_queue' %}" class="nav-link">Manage</a>
+   <a href="{% url 'notifications' %}" class="nav-link nav-notify"><svg class="icon"><use href="#i-bell"></use></svg><span>Updates</span>{% if unread_count %}<span class="notification-dot">{{ unread_count }}</span>{% endif %}</a>
+   <span class="nav-avatar" title="Signed in as {{ user.username }}">{{ user.first_name|default:user.username|slice:':1'|upper }}</span>
+   <form method="post" action="{% url 'logout' %}" class="inline-form">{% csrf_token %}<button class="nav-link nav-signout" type="submit">Sign out</button></form>
+   {% else %}
+   <a href="{% url 'login' %}" class="nav-link">Sign in</a>
+   <a href="{% url 'register' %}" class="btn btn-primary btn-small">Get started <svg class="icon"><use href="#i-arrow"></use></svg></a>
+   {% endif %}
+  </nav>
+ </div>
+</header>
+{% if messages %}<div class="toast-stack" role="status" aria-live="polite">{% for message in messages %}<div class="toast {% if message.tags %}toast-{{ message.tags }}{% endif %}"><span>{{ message }}</span><button type="button" aria-label="Dismiss message" data-dismiss>×</button></div>{% endfor %}</div>{% endif %}
+<main id="main">{% block content %}{% endblock %}</main>
+<footer class="site-footer"><div class="container footer-layout"><div><a class="logo" href="{% url 'home' %}"><span class="logo-mark"><span></span><span></span><span></span></span>KINETRA<span class="logo-dot">.</span></a><p>Resource access, thoughtfully managed.</p></div><div class="footer-right"><span>Built for spaces, tools and the people who use them.</span><span><a href="{% url 'privacy' %}">Privacy overview</a> · <a href="{% url 'terms' %}">Usage principles</a></span><span>© {% now 'Y' %} KINETRA · Responsible access by design</span></div></div></footer>
+</body></html>
