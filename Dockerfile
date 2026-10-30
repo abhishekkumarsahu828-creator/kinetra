@@ -7,5 +7,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . /app
 RUN mkdir -p /app/media /app/staticfiles && chown -R app:app /app
 USER app
-EXPOSE 8000
+EXPOSE 10000
 CMD ["sh", "./scripts/start.sh"]
