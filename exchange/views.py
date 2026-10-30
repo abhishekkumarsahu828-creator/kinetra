@@ -24,9 +24,10 @@ def _fail(request,e):
 
 
 def home(request):
-    featured=Resource.objects.filter(status='active',organisation__is_active=True).select_related('organisation')[:6]
-    return render(request,'exchange/home.html',{'featured':featured,
-        'resource_count':Resource.objects.filter(status='active').count(),
+    active_resources=Resource.objects.filter(status='active',organisation__is_active=True).select_related('organisation')
+    featured=active_resources[:6]
+    return render(request,'exchange/home.html',{'featured':featured,'hero_resource':active_resources.first(),
+        'resource_count':active_resources.count(),
         'org_count':Organisation.objects.filter(is_active=True).count()})
 
 
@@ -48,7 +49,7 @@ def marketplace(request):
 
 
 def resource_detail(request,pk):
-    resource=get_object_or_404(Resource.objects.select_related('organisation','owner'),pk=pk)
+    resource=get_object_or_404(Resource.objects.filter(organisation__is_active=True).select_related('organisation','owner'),pk=pk)
     if resource.status=='archived': raise Http404()
     eligible,eligibility_message=(False,'Sign in to check your eligibility.')
     if request.user.is_authenticated:

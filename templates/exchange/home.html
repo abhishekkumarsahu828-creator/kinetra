@@ -9,7 +9,7 @@
  <div class="hero-right"><div class="hero-decoration decor-one"></div><div class="hero-decoration decor-two"></div>
   <div class="visual-panel"><div class="panel-upper"><div class="panel-dots"><i></i><i></i><i></i></div><span>RESOURCE OVERVIEW</span><span class="panel-tag">AVAILABLE</span></div>
    <div class="panel-image"><div class="panel-grid"></div><div class="hero-machine"><span class="machine-top"></span><span class="machine-left"></span><span class="machine-core"></span><span class="machine-bottom"></span></div><div class="panel-overprint">DESIGN<br>MAKE<br>SHARE<span>.</span></div></div>
-   <div class="panel-title"><div><small>INNOVATION LAB · EQUIPMENT</small><strong>Ultimaker S5 · 3D Printer</strong></div><span class="panel-capacity"><svg class="icon"><use href="#i-shield"></use></svg></span></div>
+   <div class="panel-title"><div>{% if hero_resource %}<small>{{ hero_resource.organisation.name }} · {{ hero_resource.get_category_display }}</small><strong>{{ hero_resource.name }}</strong>{% else %}<small>RESOURCE PREVIEW</small><strong>Share what your community can use</strong>{% endif %}</div><span class="panel-capacity"><svg class="icon"><use href="#i-shield"></use></svg></span></div>
    <div class="panel-checks"><span><svg class="icon"><use href="#i-check"></use></svg>Verified access</span><span><svg class="icon"><use href="#i-calendar"></use></svg>Controlled booking</span></div>
   </div>
   <div class="floating-card"><span class="floating-icon"><svg class="icon"><use href="#i-check"></use></svg></span><div><strong>Access, approved.</strong><small>Every action accounted for.</small></div></div>

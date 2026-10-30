@@ -4,7 +4,7 @@
   <div class="resource-art" aria-hidden="true"><span class="art-orbit"></span><span class="art-shape"><svg class="icon"><use href="#i-box"></use></svg></span><span class="art-small"></span></div>
   {% endif %}<span class="category-chip">{{ res.get_category_display }}</span>
  </a>
- <div class="resource-copy"><div class="resource-org">{{ res.organisation.name }}</div><h3><a href="{% url 'resource_detail' res.pk %}">{{ res.name }}</a></h3><p>{{ res.summary|truncatechars:102 }}</p>
+ <div class="resource-copy"><div class="resource-org">{{ res.organisation.name }}{% if 'kinetra-demo-' in res.organisation.slug %} <span class="demo-badge">DEMO</span>{% endif %}</div><h3><a href="{% url 'resource_detail' res.pk %}">{{ res.name }}</a></h3><p>{{ res.summary|truncatechars:102 }}</p>
  <div class="resource-meta"><span><svg class="icon"><use href="#i-pin"></use></svg>{{ res.location|truncatechars:31 }}</span><span class="available-dot">Requests open</span></div>
  <div class="resource-footer"><span>{% if res.required_training %}<svg class="icon"><use href="#i-shield"></use></svg>Training required{% else %}<svg class="icon"><use href="#i-check"></use></svg>Verified members{% endif %}</span><a href="{% url 'resource_detail' res.pk %}" class="icon-circle" aria-label="View details for {{ res.name }}"><svg class="icon"><use href="#i-arrow"></use></svg></a></div></div>
 </article>

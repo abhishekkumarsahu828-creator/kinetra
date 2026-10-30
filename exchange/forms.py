@@ -24,6 +24,10 @@ class SignupForm(StyledFormMixin,UserCreationForm):
     class Meta:
         model=User
         fields=('first_name','last_name','username','email','organisation','password1','password2')
+    def __init__(self,*args,**kwargs):
+        super().__init__(*args,**kwargs)
+        self.fields['organisation'].label_from_instance=lambda org: f'{org.name} · DEMO' if org.slug.startswith('kinetra-demo-') else org.name
+        self.fields['organisation'].help_text='Organisations marked DEMO are fictional preview data.'
     def clean_email(self):
         email=self.cleaned_data['email'].lower()
         if User.objects.filter(email__iexact=email).exists(): raise ValidationError('This email is already registered.')
