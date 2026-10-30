@@ -6,8 +6,10 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied,ValidationError
 from django.utils import timezone
-from .models import Organisation,Membership,Credential,Resource,Booking,ConditionReport,Incident,AuditEvent,Notification
+from .models import (Organisation,Membership,Credential,Resource,Booking,ConditionReport,Incident,
+                     AuditEvent,Notification,TrainingAttempt)
 from . import services
+from .training_content import course_for
 
 class SharingJourneyTests(TestCase):
     @classmethod
@@ -149,3 +151,109 @@ class SharingJourneyTests(TestCase):
         later=self.start+timedelta(hours=8)
         with self.assertRaises(ValidationError):
             services.request_booking(self.student,self.resource.pk,later,later+timedelta(hours=2),'Third project')
+
+
+class TrainingJourneyTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        User=get_user_model()
+        cls.admin=User.objects.create_user('training_admin',password='StrongPassword.987')
+        cls.member=User.objects.create_user('training_member',password='StrongPassword.987')
+        cls.outsider=User.objects.create_user('training_outsider',password='StrongPassword.987')
+        cls.org=Organisation.objects.create(name='Fictional Training Campus',slug='fictional-training')
+        cls.admin_membership=Membership.objects.create(user=cls.admin,organisation=cls.org,role='admin',status='active')
+        cls.member_membership=Membership.objects.create(user=cls.member,organisation=cls.org,role='member',status='active')
+        cls.resource=Resource.objects.create(organisation=cls.org,owner=cls.admin,name='Demo 3D Printer',category='fabrication',
+            summary='Fictional training test resource',description='Test equipment',location='Lab 2',
+            available_days='0,1,2,3,4,5,6',open_time=time(0,0),close_time=time(23,59),
+            max_hours=4,required_training='Introductory 3D printer safety')
+
+    def valid_answers(self):
+        course=course_for(self.resource.required_training)
+        return {f'q{i}':str(question['answer']) for i,question in enumerate(course['questions'])}
+
+    def test_member_lesson_failed_quiz_and_pass_then_practical_review_unlocks_booking(self):
+        client=Client()
+        client.force_login(self.member)
+        detail=client.get(reverse('resource_detail',args=[self.resource.pk]))
+        self.assertEqual(detail.status_code,200)
+        self.assertContains(detail,'Start training')
+        lesson=client.get(reverse('training_course',args=[self.resource.pk]))
+        self.assertEqual(lesson.status_code,200)
+        self.assertContains(lesson,'SHORT LESSON')
+        self.assertContains(lesson,'name="q0"')
+
+        course=course_for(self.resource.required_training)
+        wrong_answers={f'q{i}':str((question['answer']+1)%len(question['options']))
+                       for i,question in enumerate(course['questions'])}
+        response=client.post(reverse('training_submit',args=[self.resource.pk]),wrong_answers)
+        self.assertEqual(response.status_code,302)
+        failed=TrainingAttempt.objects.get(membership=self.member_membership,passed=False)
+        self.assertEqual(failed.score,0)
+        self.assertFalse(Credential.objects.filter(member=self.member_membership).exists())
+
+        response=client.post(reverse('training_submit',args=[self.resource.pk]),self.valid_answers())
+        self.assertEqual(response.status_code,302)
+        passed=TrainingAttempt.objects.get(membership=self.member_membership,passed=True)
+        self.assertEqual(passed.score,100)
+        credential=Credential.objects.get(member=self.member_membership,title__iexact=self.resource.required_training)
+        self.assertEqual(credential.status,Credential.Status.PENDING)
+        self.assertFalse(services.credential_status(self.member,self.resource)[0])
+
+        client.force_login(self.admin)
+        review_page=client.get(reverse('membership_manage',args=[self.org.pk]))
+        self.assertEqual(review_page.status_code,200)
+        self.assertContains(review_page,'Practical check & decision')
+        self.assertContains(review_page,'Quiz: 100%')
+        self.assertContains(review_page,'name="expires_at"')
+        self.assertContains(review_page,'Leave expiry blank for 1 year.')
+
+        base=timezone.localtime(timezone.now())+timedelta(days=2)
+        start=timezone.make_aware(datetime.combine(base.date(),time(11,0)),timezone.get_current_timezone())
+        with self.assertRaises(ValidationError):
+            services.request_booking(self.member,self.resource.pk,start,start+timedelta(hours=1),'Training gate test')
+
+        response=client.post(reverse('credential_review',args=[credential.pk]),{'decision':'verified'})
+        self.assertEqual(response.status_code,302)
+        credential.refresh_from_db()
+        self.assertEqual(credential.status,Credential.Status.VERIFIED)
+        self.assertEqual(credential.reviewed_by,self.admin)
+        self.assertEqual(credential.expires_at,timezone.localdate()+timedelta(days=365))
+        self.assertTrue(services.credential_status(self.member,self.resource)[0])
+        booking=services.request_booking(self.member,self.resource.pk,start,start+timedelta(hours=1),'Training gate test')
+        self.assertEqual(booking.status,Booking.Status.REQUESTED)
+
+    def test_unverified_members_cannot_open_or_submit_training(self):
+        Membership.objects.create(user=self.outsider,organisation=self.org,role='member',status='pending')
+        client=Client()
+        client.force_login(self.outsider)
+        self.assertEqual(client.get(reverse('membership_manage',args=[self.org.pk])).status_code,403)
+        self.assertEqual(client.get(reverse('training_course',args=[self.resource.pk])).status_code,403)
+        self.assertEqual(client.post(reverse('training_submit',args=[self.resource.pk]),self.valid_answers()).status_code,403)
+        self.assertEqual(TrainingAttempt.objects.count(),0)
+
+    def test_reviewer_cannot_verify_their_own_qualification_and_expiry_is_checked(self):
+        credential=Credential.objects.create(member=self.admin_membership,title='Electrical workshop safety')
+        client=Client()
+        client.force_login(self.admin)
+        self.assertEqual(client.post(reverse('credential_review',args=[credential.pk]),
+            {'decision':'verified'}).status_code,403)
+        credential.refresh_from_db()
+        self.assertEqual(credential.status,Credential.Status.PENDING)
+
+        credential=Credential.objects.create(member=self.member_membership,title='Electrical workshop safety')
+        expired=(timezone.localdate()-timedelta(days=1)).isoformat()
+        response=client.post(reverse('credential_review',args=[credential.pk]),
+            {'decision':'verified','expires_at':expired})
+        self.assertEqual(response.status_code,302)
+        credential.refresh_from_db()
+        self.assertEqual(credential.status,Credential.Status.PENDING)
+        self.assertIsNone(credential.reviewed_by)
+
+        custom_expiry=(timezone.localdate()+timedelta(days=90)).isoformat()
+        response=client.post(reverse('credential_review',args=[credential.pk]),
+            {'decision':'verified','expires_at':custom_expiry})
+        self.assertEqual(response.status_code,302)
+        credential.refresh_from_db()
+        self.assertEqual(credential.status,Credential.Status.VERIFIED)
+        self.assertEqual(credential.expires_at,timezone.localdate()+timedelta(days=90))
