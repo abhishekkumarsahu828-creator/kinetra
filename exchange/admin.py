@@ -1,7 +1,7 @@
 """Emergency platform admin. Operational changes MUST pass through audited app workflows."""
 from django.contrib import admin
 from .models import (Organisation,Membership,Credential,Resource,Blackout,Booking,ConditionReport,
-                     Incident,Notification,AuditEvent)
+                     Incident,Notification,AuditEvent,TrainingAttempt)
 
 class OperationalReadOnly(admin.ModelAdmin):
     """Superadmin may inspect but not bypass domain services via admin forms."""
@@ -23,6 +23,11 @@ class MembershipAdmin(OperationalReadOnly):
 class CredentialAdmin(OperationalReadOnly):
     list_display=('title','member','status','expires_at')
     list_filter=('status',)
+
+@admin.register(TrainingAttempt)
+class TrainingAttemptAdmin(OperationalReadOnly):
+    list_display=('training_title','membership','resource','score','passed','completed_at')
+    list_filter=('passed','training_title')
 
 @admin.register(Resource)
 class ResourceAdmin(OperationalReadOnly):

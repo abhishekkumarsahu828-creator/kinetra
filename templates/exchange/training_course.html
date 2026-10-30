@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}{{ resource.required_training }} · KINETRA{% endblock %}
+{% block content %}
+<section class="dashboard-page"><div class="container">
+<div class="dash-top"><div><span class="eyebrow">INSTITUTIONAL TRAINING</span><h1>{{ resource.required_training }}</h1><p>{{ resource.name }} · {{ resource.organisation.name }}</p></div><a href="{% url 'resource_detail' resource.pk %}" class="btn btn-outline">Back to resource</a></div>
+
+<section class="content-panel"><span class="eyebrow">SHORT LESSON</span><h2>Read this before the quiz</h2><ol>{% for item in course.lesson %}<li>{{ item }}</li>{% endfor %}</ol></section>
+
+{% if eligible %}<section class="content-panel"><h2>Training verified</h2><p>Your institutional reviewer has verified this qualification. You can return to the resource page to request a booking.</p></section>
+{% else %}
+<section class="content-panel"><span class="eyebrow">KNOWLEDGE CHECK · {{ course.pass_mark }}% TO PASS</span><h2>Answer all questions</h2><p class="muted">A passing quiz sends a review request to your institutional Admin/Manager. Practical instructor training must also be confirmed before you can book.</p>
+<form method="post" action="{% url 'training_submit' resource.pk %}">{% csrf_token %}
+{% for question in course.questions %}<fieldset class="content-panel"><legend><strong>{{ forloop.counter }}. {{ question.prompt }}</strong></legend>{% for option in question.options %}<label style="display:block;padding:8px 0"><input type="radio" name="q{{ forloop.parentloop.counter0 }}" value="{{ forloop.counter0 }}" required> {{ option }}</label>{% endfor %}</fieldset>{% endfor %}
+<button class="btn btn-primary" type="submit">Submit quiz</button>
+</form></section>
+{% endif %}
+
+{% if credential %}<section class="content-panel"><span class="eyebrow">ELIGIBILITY STATUS</span><h2>{{ credential.get_status_display }}</h2>{% if credential.training_completed_at %}<p>Latest quiz score: {{ credential.training_score }}% · {{ credential.training_completed_at|date:'d M Y, H:i' }}</p>{% endif %}{% if credential.status == 'pending' %}<p>Your quiz result is waiting for an institutional Admin/Manager to confirm practical training.</p>{% endif %}{% if credential.review_note %}<p class="muted">{{ credential.review_note }}</p>{% endif %}{% if credential.expires_at %}<p class="muted">Expires {{ credential.expires_at|date:'d M Y' }}</p>{% endif %}</section>{% endif %}
+
+{% if attempts %}<section class="content-panel"><h2>Recent attempts</h2><ul>{% for attempt in attempts %}<li>{{ attempt.completed_at|date:'d M Y, H:i' }} · {{ attempt.score }}% · {% if attempt.passed %}Passed{% else %}Try again{% endif %}</li>{% endfor %}</ul></section>{% endif %}
+</div></section>
+{% endblock %}

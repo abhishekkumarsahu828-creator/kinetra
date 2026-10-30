@@ -55,11 +55,26 @@ class Credential(TimeStamped):
     title=models.CharField(max_length=150)
     status=models.CharField(max_length=12,choices=Status.choices,default=Status.PENDING)
     expires_at=models.DateField(null=True,blank=True)
+    training_score=models.PositiveSmallIntegerField(null=True,blank=True)
+    training_completed_at=models.DateTimeField(null=True,blank=True)
     reviewed_by=models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.SET_NULL,null=True,blank=True,related_name='+')
     review_note=models.CharField(max_length=300,blank=True)
     class Meta:
         constraints=[models.UniqueConstraint(fields=['member','title'],name='unique_credential_per_member')]
     def __str__(self): return f'{self.title} ({self.member.user.username})'
+
+class TrainingAttempt(TimeStamped):
+    membership=models.ForeignKey(Membership,on_delete=models.PROTECT,related_name='training_attempts')
+    resource=models.ForeignKey('exchange.Resource',on_delete=models.PROTECT,related_name='training_attempts')
+    training_title=models.CharField(max_length=150)
+    answers=models.JSONField(default=list)
+    score=models.PositiveSmallIntegerField()
+    passed=models.BooleanField(default=False)
+    completed_at=models.DateTimeField(auto_now_add=True)
+    class Meta:
+        ordering=['-completed_at']
+        indexes=[models.Index(fields=['membership','training_title','completed_at'],name='training_attempt_member_idx')]
+    def __str__(self): return f'{self.training_title} · {self.score}% · {self.membership.user.username}'
 
 class Resource(TimeStamped):
     class Category(models.TextChoices):

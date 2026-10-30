@@ -10,11 +10,13 @@ from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404,redirect,render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
 from . import services
 from .forms import SignupForm,ResourceForm,BookingForm,ConditionForm,IncidentForm,CredentialForm,BlackoutForm
 from .models import (Organisation,Membership,Credential,Resource,Booking,ConditionReport,Blackout,
-                     Incident,Notification,AuditEvent)
+                     Incident,Notification,AuditEvent,TrainingAttempt)
+from .training_content import course_for
 
 
 def _fail(request,e):
@@ -52,11 +54,16 @@ def resource_detail(request,pk):
     resource=get_object_or_404(Resource.objects.filter(organisation__is_active=True).select_related('organisation','owner'),pk=pk)
     if resource.status=='archived': raise Http404()
     eligible,eligibility_message=(False,'Sign in to check your eligibility.')
+    training_member=False
     if request.user.is_authenticated:
         eligible,eligibility_message=services.credential_status(request.user,resource)
+        if resource.required_training:
+            training_member=Membership.objects.filter(user=request.user,organisation=resource.organisation,
+                status=Membership.Status.ACTIVE).exists()
     bookings=Booking.objects.filter(resource=resource,status__in=services.BLOCKING,start__gte=timezone.now()-timedelta(days=1)).order_by('start')[:12]
     return render(request,'exchange/resource_detail.html',{'resource':resource,'eligible':eligible,
-       'eligibility_message':eligibility_message,'reserved':bookings})
+       'eligibility_message':eligibility_message,'reserved':bookings,'training_member':training_member,
+       'training_course_available':bool(course_for(resource.required_training))})
 
 
 def register(request):
@@ -344,6 +351,81 @@ def credential_request(request,org_pk):
 
 
 @login_required
+def training_course(request,pk):
+    resource=get_object_or_404(Resource.objects.filter(organisation__is_active=True),pk=pk,status='active')
+    member=services.membership(request.user,resource.organisation)
+    course=course_for(resource.required_training)
+    if not course: raise Http404('No in-app lesson is available for this training requirement.')
+    eligible,_=services.credential_status(request.user,resource)
+    credential=Credential.objects.filter(member=member,title__iexact=resource.required_training).order_by('-updated_at').first()
+    attempts=list(TrainingAttempt.objects.filter(membership=member,resource=resource,
+        training_title__iexact=resource.required_training).order_by('-completed_at')[:5])
+    return render(request,'exchange/training_course.html',{'resource':resource,'course':course,
+        'eligible':eligible,'credential':credential,'attempts':attempts})
+
+
+@login_required
+@require_POST
+def training_submit(request,pk):
+    resource=get_object_or_404(Resource.objects.filter(organisation__is_active=True),pk=pk,status='active')
+    member=services.membership(request.user,resource.organisation)
+    course=course_for(resource.required_training)
+    if not course: raise Http404('No in-app lesson is available for this training requirement.')
+    eligible,_=services.credential_status(request.user,resource)
+    if eligible:
+        messages.info(request,'Your training is already verified and current.')
+        return redirect('resource_detail',pk=resource.pk)
+
+    selected=[]
+    correct=0
+    for index,question in enumerate(course['questions']):
+        value=request.POST.get(f'q{index}','')
+        try:
+            answer=int(value)
+        except (TypeError,ValueError):
+            answer=-1
+        if not 0<=answer<len(question['options']):
+            messages.error(request,'Please answer every question before submitting.')
+            return redirect('training_course',pk=resource.pk)
+        selected.append(answer)
+        if answer==question['answer']:
+            correct+=1
+    score=round(correct*100/len(course['questions']))
+    passed=score>=course['pass_mark']
+
+    with transaction.atomic():
+        attempt=TrainingAttempt.objects.create(membership=member,resource=resource,
+            training_title=resource.required_training,answers=selected,score=score,passed=passed)
+        services.audit(resource.organisation,request.user,
+            'training.quiz_passed' if passed else 'training.quiz_failed',attempt,
+            score=score,pass_mark=course['pass_mark'])
+        if passed:
+            credential=Credential.objects.filter(member=member,title__iexact=resource.required_training).order_by('-updated_at').first()
+            if credential is None:
+                credential=Credential(member=member,title=resource.required_training)
+            credential.status=Credential.Status.PENDING
+            credential.expires_at=None
+            credential.training_score=score
+            credential.training_completed_at=timezone.now()
+            credential.reviewed_by=None
+            credential.review_note='In-app knowledge check passed. Practical/instructor verification is still required.'
+            credential.save()
+            services.audit(resource.organisation,request.user,'training.review_requested',credential,
+                score=score,training_title=resource.required_training)
+            reviewers=Membership.objects.filter(organisation=resource.organisation,status=Membership.Status.ACTIVE,
+                role__in=[Membership.Role.ADMIN,Membership.Role.MANAGER]).exclude(user=request.user).select_related('user')
+            for reviewer in reviewers:
+                services.notify(reviewer.user,'Training ready for review',
+                    f'{request.user.get_username()} passed the {resource.required_training} knowledge check.')
+
+    if passed:
+        messages.success(request,f'Quiz passed ({score}%). An institutional Admin/Manager must confirm practical training before booking.')
+    else:
+        messages.warning(request,f'{score}% score. Review the lesson and try again; {course["pass_mark"]}% is needed.')
+    return redirect('training_course',pk=resource.pk)
+
+
+@login_required
 @require_POST
 def credential_review(request,pk):
     cred=get_object_or_404(Credential.objects.select_related('member__organisation'),pk=pk)
@@ -353,8 +435,18 @@ def credential_review(request,pk):
     if decision not in ('verified','rejected'):
         messages.error(request,'Invalid verification decision.')
         return redirect('membership_manage',org_pk=cred.member.organisation_id)
+    expiry_raw=request.POST.get('expires_at','').strip()
+    expires_at=parse_date(expiry_raw) if expiry_raw else None
+    if decision=='verified' and expiry_raw and expires_at is None:
+        messages.error(request,'Enter a valid expiry date.')
+        return redirect('membership_manage',org_pk=cred.member.organisation_id)
+    if decision=='verified' and expires_at and expires_at<timezone.localdate():
+        messages.error(request,'Expiry date must be today or later.')
+        return redirect('membership_manage',org_pk=cred.member.organisation_id)
     with transaction.atomic():
         cred.status=decision; cred.reviewed_by=request.user; cred.review_note=request.POST.get('note','')[:300]
+        if decision=='verified':
+            cred.expires_at=expires_at or timezone.localdate()+timedelta(days=365)
         cred.save()
         services.audit(cred.member.organisation,request.user,'credential.reviewed',cred,decision=decision)
         services.notify(cred.member.user,'Qualification reviewed',f'{cred.title}: {decision}.')
